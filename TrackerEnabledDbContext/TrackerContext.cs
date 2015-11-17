@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Data.Entity;
 using System.Data.Entity.Infrastructure;
@@ -6,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TrackerEnabledDbContext.Common;
+using TrackerEnabledDbContext.Common.Configuration;
 using TrackerEnabledDbContext.Common.Interfaces;
 using TrackerEnabledDbContext.Common.Models;
 
@@ -27,6 +29,7 @@ namespace TrackerEnabledDbContext
         {
         }
 
+
         public DbSet<AuditLog> AuditLog { get; set; }
 
         public DbSet<AuditLogDetail> LogDetails { get; set; }
@@ -40,6 +43,8 @@ namespace TrackerEnabledDbContext
         /// <returns>Returns the number of objects written to the underlying database.</returns>
         public virtual int SaveChanges(object userName)
         {
+            if (!GlobalTrackingConfig.Enabled) return base.SaveChanges();
+
             CommonTracker.AuditChanges(this, userName);
 
             IEnumerable<DbEntityEntry> addedEntries = CommonTracker.GetAdditions(this);
@@ -61,17 +66,19 @@ namespace TrackerEnabledDbContext
         /// <returns>Returns the number of objects written to the underlying database.</returns>
         public override int SaveChanges()
         {
+            if (!GlobalTrackingConfig.Enabled) return base.SaveChanges();
+            //var user = Thread.CurrentPrincipal?.Identity?.Name ?? "Anonymous"; 
             return SaveChanges(null);
         }
 
         /// <summary>
         ///     Get all logs for the given model type
         /// </summary>
-        /// <typeparam name="TTable">Type of domain model</typeparam>
+        /// <typeparam name="TEntity">Type of domain model</typeparam>
         /// <returns></returns>
-        public IQueryable<AuditLog> GetLogs<TTable>()
+        public IQueryable<AuditLog> GetLogs<TEntity>()
         {
-            return CommonTracker.GetLogs<TTable>(this);
+            return CommonTracker.GetLogs<TEntity>(this);
         }
 
         /// <summary>
@@ -87,12 +94,12 @@ namespace TrackerEnabledDbContext
         /// <summary>
         ///     Get all logs for the given model type for a specific record
         /// </summary>
-        /// <typeparam name="TTable">Type of domain model</typeparam>
+        /// <typeparam name="TEntity">Type of domain model</typeparam>
         /// <param name="primaryKey">primary key of record</param>
         /// <returns></returns>
-        public IQueryable<AuditLog> GetLogs<TTable>(object primaryKey)
+        public IQueryable<AuditLog> GetLogs<TEntity>(object primaryKey)
         {
-            return CommonTracker.GetLogs<TTable>(this, primaryKey);
+            return CommonTracker.GetLogs<TEntity>(this, primaryKey);
         }
 
         /// <summary>
@@ -120,6 +127,8 @@ namespace TrackerEnabledDbContext
         /// <returns>Returns the number of objects written to the underlying database.</returns>
         public virtual async Task<int> SaveChangesAsync(object userName, CancellationToken cancellationToken)
         {
+            if (!GlobalTrackingConfig.Enabled) return await base.SaveChangesAsync(cancellationToken);
+
             if (cancellationToken.IsCancellationRequested)
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -147,6 +156,8 @@ namespace TrackerEnabledDbContext
         /// <returns>Returns the number of objects written to the underlying database.</returns>
         public virtual async Task<int> SaveChangesAsync(int userId)
         {
+            if (!GlobalTrackingConfig.Enabled) return await base.SaveChangesAsync(CancellationToken.None);
+
             return await SaveChangesAsync(userId, CancellationToken.None);
         }
 
@@ -158,6 +169,8 @@ namespace TrackerEnabledDbContext
         /// <returns>Returns the number of objects written to the underlying database.</returns>
         public virtual async Task<int> SaveChangesAsync(string userName)
         {
+            if (!GlobalTrackingConfig.Enabled) return await base.SaveChangesAsync(CancellationToken.None);
+
             return await SaveChangesAsync(userName, CancellationToken.None);
         }
 
@@ -171,6 +184,8 @@ namespace TrackerEnabledDbContext
         /// </returns>
         public override async Task<int> SaveChangesAsync()
         {
+            if (!GlobalTrackingConfig.Enabled) return await base.SaveChangesAsync(CancellationToken.None);
+
             return await SaveChangesAsync(null, CancellationToken.None);
         }
 
@@ -188,6 +203,8 @@ namespace TrackerEnabledDbContext
         /// </returns>
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken)
         {
+            if (!GlobalTrackingConfig.Enabled) return await base.SaveChangesAsync(cancellationToken);
+
             return await SaveChangesAsync(null, cancellationToken);
         }
 

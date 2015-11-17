@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Data.Entity;
 using System.Data.Entity.Infrastructure;
 using System.Linq;
+using TrackerEnabledDbContext.Common.Auditors;
+using TrackerEnabledDbContext.Common.Configuration;
 using TrackerEnabledDbContext.Common.Extensions;
 using TrackerEnabledDbContext.Common.Interfaces;
 using TrackerEnabledDbContext.Common.Models;
@@ -21,14 +23,39 @@ namespace TrackerEnabledDbContext.Common
             {
                 using (var auditer = new LogAuditor(ent))
                 {
-                    AuditLog record = auditer.CreateLogRecord(userName,
-                        ent.State == EntityState.Modified ? EventType.Modified : EventType.Deleted, dbContext);
+                    var eventType = GetEventType(ent);
+
+                    AuditLog record = auditer.CreateLogRecord(userName, eventType, dbContext);
                     if (record != null)
                     {
                         dbContext.AuditLog.Add(record);
                     }
                 }
             }
+        }
+
+        private static EventType GetEventType(DbEntityEntry entry)
+        {
+            var isSoftDeletable = GlobalTrackingConfig.SoftDeletableType?.IsInstanceOfType(entry.Entity);
+
+            if (isSoftDeletable != null && isSoftDeletable.Value)
+            {
+                var previouslyDeleted = (bool)entry.OriginalValues[GlobalTrackingConfig.SoftDeletablePropertyName];
+                var nowDeleted = (bool)entry.CurrentValues[GlobalTrackingConfig.SoftDeletablePropertyName];
+
+                if (previouslyDeleted && !nowDeleted)
+                {
+                    return EventType.UnDeleted;
+                }
+
+                if (!previouslyDeleted && nowDeleted)
+                {
+                    return EventType.SoftDeleted;
+                }
+            }
+
+            var eventType = entry.State == EntityState.Modified ? EventType.Modified : EventType.Deleted;
+            return eventType;
         }
 
         public static IEnumerable<DbEntityEntry> GetAdditions(ITrackerContext dbContext)
@@ -53,11 +80,11 @@ namespace TrackerEnabledDbContext.Common
             }
         }
 
-
         private static IEnumerable<string> EntityTypeNames<TEntity>()
         {
             Type entityType = typeof(TEntity);
-            return typeof(TEntity).Assembly.GetTypes().Where(t => t.IsSubclassOf(entityType) || t.FullName == entityType.FullName).Select(m => m.FullName);
+            return typeof(TEntity).Assembly.GetTypes()
+                .Where(t => t.IsSubclassOf(entityType) || t.FullName == entityType.FullName).Select(m => m.FullName);
         }
 
         /// <summary>
@@ -68,7 +95,6 @@ namespace TrackerEnabledDbContext.Common
         public static IQueryable<AuditLog> GetLogs<TEntity>(ITrackerContext context)
         {
             IEnumerable<string> entityTypeNames = EntityTypeNames<TEntity>();
-            string entityTypeName = typeof(TEntity).Name;
             return context.AuditLog.Where(x => entityTypeNames.Contains(x.TypeFullName));
         }
 
@@ -91,7 +117,6 @@ namespace TrackerEnabledDbContext.Common
         public static IQueryable<AuditLog> GetLogs<TEntity>(ITrackerContext context, object primaryKey)
         {
             string key = primaryKey.ToString();
-            string entityTypeName = typeof(TEntity).Name;
             IEnumerable<string> entityTypeNames = EntityTypeNames<TEntity>();
 
             return context.AuditLog.Where(x => entityTypeNames.Contains(x.TypeFullName) && x.RecordId == key);
